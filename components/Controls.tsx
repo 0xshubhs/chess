@@ -9,14 +9,21 @@ type Props = {
   statusMsg: string;
   elo: number;
   setElo: (elo: number) => void;
+  onNewGame?: () => void;
 };
 
-export default function Controls({ fen, setFen, statusMsg, elo, setElo }: Props) {
-  const game = new Chess(fen);
-
+export default function Controls({
+  fen,
+  setFen,
+  statusMsg,
+  elo,
+  setElo,
+  onNewGame,
+}: Props) {
   function reset() {
     const g = new Chess();
     setFen(g.fen());
+    if (onNewGame) onNewGame();
   }
 
   function undo() {
@@ -26,70 +33,71 @@ export default function Controls({ fen, setFen, statusMsg, elo, setElo }: Props)
     setFen(g.fen());
   }
 
-  const turnText = game.turn() === "w" ? "White" : "Black";
+  // Difficulty label based on ELO
+  const getDifficultyLabel = (elo: number) => {
+    if (elo < 800) return "Beginner";
+    if (elo < 1200) return "Casual";
+    if (elo < 1600) return "Intermediate";
+    if (elo < 2000) return "Advanced";
+    return "Master";
+  };
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="p-4 bg-white dark:bg-gray-800 rounded-lg shadow-lg">
-        <div className="mb-2 text-lg font-semibold text-amber-800 dark:text-amber-200">
-          Game Status
+    <div className="flex flex-col gap-3">
+      {/* Status badge - only show when relevant */}
+      {statusMsg && statusMsg !== "Playing" && (
+        <div
+          className={`px-3 py-2 rounded-lg text-center font-semibold text-sm ${
+            statusMsg === "Checkmate"
+              ? "bg-red-900/50 text-red-300"
+              : statusMsg === "Check"
+              ? "bg-yellow-900/50 text-yellow-300"
+              : "bg-gray-700 text-gray-300"
+          }`}
+        >
+          {statusMsg === "Checkmate" && "⚔️ "}
+          {statusMsg === "Check" && "⚠️ "}
+          {statusMsg}
+          {statusMsg === "Checkmate" && "!"}
         </div>
-        <div className="mb-2">
-          <span className="text-gray-600 dark:text-gray-400">Status:</span>{" "}
-          <span className={`font-medium ${statusMsg === "Check" || statusMsg === "Checkmate" ? "text-red-600" : "text-green-600"}`}>
-            {statusMsg || "Playing"}
+      )}
+
+      {/* ELO Slider */}
+      <div className="bg-[#262626] rounded-lg p-3">
+        <div className="flex justify-between items-center mb-2">
+          <span className="text-xs uppercase tracking-wider text-gray-500 font-semibold">
+            AI Strength
           </span>
+          <span className="text-xs text-gray-400">{getDifficultyLabel(elo)}</span>
         </div>
-        <div className="mb-2">
-          <span className="text-gray-600 dark:text-gray-400">Turn:</span>{" "}
-          <span className="font-medium">{turnText}</span>
-        </div>
-      </div>
-
-      <div className="p-4 bg-white dark:bg-gray-800 rounded-lg shadow-lg">
-        <label className="block mb-2 text-lg font-semibold text-amber-800 dark:text-amber-200">
-          AI Difficulty
-        </label>
-        <div className="mb-2 text-center text-2xl font-bold text-amber-600">
-          {elo} ELO
-        </div>
-        <input
-          type="range"
-          min={600}
-          max={2400}
-          step={100}
-          value={elo}
-          onChange={(e) => setElo(Number(e.target.value))}
-          className="w-full h-2 bg-amber-200 rounded-lg appearance-none cursor-pointer accent-amber-600"
-        />
-        <div className="flex justify-between text-xs text-gray-500 mt-1">
-          <span>Beginner</span>
-          <span>Master</span>
+        <div className="flex items-center gap-3">
+          <input
+            type="range"
+            min={600}
+            max={2400}
+            step={100}
+            value={elo}
+            onChange={(e) => setElo(Number(e.target.value))}
+            className="flex-1 h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-green-500"
+          />
+          <span className="text-white font-bold text-sm w-12 text-right">{elo}</span>
         </div>
       </div>
 
+      {/* Action buttons */}
       <div className="flex gap-2">
         <button
           onClick={reset}
-          className="flex-1 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-medium rounded-lg transition-colors"
+          className="flex-1 px-4 py-2.5 bg-green-600 hover:bg-green-500 text-white font-semibold text-sm rounded-lg transition-colors"
         >
           New Game
         </button>
         <button
           onClick={undo}
-          className="flex-1 px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white font-medium rounded-lg transition-colors"
+          className="flex-1 px-4 py-2.5 bg-[#3d3d3d] hover:bg-[#4d4d4d] text-white font-semibold text-sm rounded-lg transition-colors"
         >
           Undo
         </button>
-      </div>
-
-      <div className="p-3 text-sm text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-900 rounded-lg">
-        <p className="mb-2">
-          <strong>How it works:</strong> After each player move, the server calls Ollama to select one legal move.
-        </p>
-        <p>
-          The ELO slider changes the AI move-selection temperature — lower ELO = more random moves, higher ELO = stronger play.
-        </p>
       </div>
     </div>
   );
