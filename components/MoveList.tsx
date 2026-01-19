@@ -11,10 +11,12 @@ type MoveEntry = {
 type Props = {
   moves: string[];
   statusMsg?: string;
+  onMoveClick?: (moveIndex: number) => void;
 };
 
-export default function MoveList({ moves, statusMsg }: Props) {
+export default function MoveList({ moves, statusMsg, onMoveClick }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const lastMoveRef = useRef<HTMLDivElement>(null);
 
   // Group moves into pairs (white, black)
   const movePairs: MoveEntry[] = [];
@@ -29,10 +31,13 @@ export default function MoveList({ moves, statusMsg }: Props) {
   const lastMoveIndex = moves.length - 1;
   const isWhiteLastMove = lastMoveIndex % 2 === 0;
 
-  // Auto-scroll to bottom
+  // Auto-scroll to last move with smooth behavior
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    if (lastMoveRef.current && scrollRef.current) {
+      lastMoveRef.current.scrollIntoView({ 
+        behavior: "smooth", 
+        block: "nearest" 
+      });
     }
   }, [moves]);
 
@@ -63,6 +68,12 @@ export default function MoveList({ moves, statusMsg }: Props) {
     return style;
   };
 
+  const handleMoveClick = (moveIdx: number) => {
+    if (onMoveClick) {
+      onMoveClick(moveIdx);
+    }
+  };
+
   return (
     <div className="move-list bg-[#262626] rounded-lg p-3">
       <div className="text-xs uppercase tracking-wider text-gray-500 mb-2 font-semibold">
@@ -70,16 +81,19 @@ export default function MoveList({ moves, statusMsg }: Props) {
       </div>
       <div
         ref={scrollRef}
-        className="max-h-48 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-600"
+        className="move-list-scroll max-h-48 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-600"
       >
         {movePairs.map((pair, idx) => {
           const isLastPair = idx === movePairs.length - 1;
           const whiteIsLast = isLastPair && isWhiteLastMove;
           const blackIsLast = isLastPair && !isWhiteLastMove && pair.black;
+          const whiteMoveIdx = idx * 2;
+          const blackMoveIdx = idx * 2 + 1;
           
           return (
             <div
               key={pair.moveNumber}
+              ref={isLastPair ? lastMoveRef : undefined}
               className={`flex items-center text-sm font-mono py-0.5 px-1 rounded ${
                 idx % 2 === 1 ? "bg-[#1e1e1e]" : ""
               }`}
@@ -87,10 +101,20 @@ export default function MoveList({ moves, statusMsg }: Props) {
               <span className="w-6 text-gray-500 text-right mr-2 text-xs">
                 {pair.moveNumber}.
               </span>
-              <span className={`w-16 ${whiteIsLast ? getMoveStyle(pair.white, true) : "text-white"}`}>
+              <span 
+                className={`w-16 cursor-pointer hover:bg-white/10 rounded px-0.5 transition-colors ${
+                  whiteIsLast ? getMoveStyle(pair.white, true) : "text-white"
+                }`}
+                onClick={() => handleMoveClick(whiteMoveIdx)}
+              >
                 {pair.white || ""}
               </span>
-              <span className={`w-16 ${blackIsLast ? getMoveStyle(pair.black, true) : "text-gray-300"}`}>
+              <span 
+                className={`w-16 cursor-pointer hover:bg-white/10 rounded px-0.5 transition-colors ${
+                  blackIsLast ? getMoveStyle(pair.black, true) : "text-gray-300"
+                }`}
+                onClick={() => pair.black && handleMoveClick(blackMoveIdx)}
+              >
                 {pair.black || ""}
                 {blackIsLast && statusMsg === "Checkmate" && (
                   <span className="ml-1 text-xs">←</span>

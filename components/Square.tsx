@@ -10,6 +10,7 @@ type Props = {
   isLegalTarget?: boolean;
   isLastMove?: boolean;
   isCheck?: boolean;
+  isBeingCaptured?: boolean;
   onClick?: () => void;
 };
 
@@ -20,6 +21,7 @@ export default function Square({
   isLegalTarget,
   isLastMove,
   isCheck,
+  isBeingCaptured,
   onClick,
 }: Props) {
   const file = square.charCodeAt(0) - 97;
@@ -51,12 +53,13 @@ export default function Square({
         />
       )}
 
-      {/* Check highlight - red radial gradient */}
+      {/* Check highlight - red radial gradient, single pulse */}
       {isCheck && (
         <div
-          className="absolute inset-0 pointer-events-none animate-pulse"
+          className="absolute inset-0 pointer-events-none"
           style={{
             background: "radial-gradient(circle, rgba(255,107,107,0.9) 0%, rgba(255,107,107,0.4) 40%, transparent 70%)",
+            animation: "checkPulse 0.4s ease-out forwards",
           }}
         />
       )}
@@ -72,10 +75,10 @@ export default function Square({
         />
       )}
 
-      {/* Legal move indicator */}
+      {/* Legal move indicator - larger on mobile */}
       {isLegalTarget && !piece && (
         <div
-          className="absolute pointer-events-none rounded-full"
+          className="legal-dot absolute pointer-events-none rounded-full"
           style={{
             width: "28%",
             height: "28%",
@@ -94,9 +97,16 @@ export default function Square({
         />
       )}
 
-      {/* Piece */}
+      {/* Piece with capture animation */}
       {piece && (
-        <div className="piece-wrapper flex items-center justify-center w-full h-full transition-transform duration-150 hover:scale-105">
+        <div 
+          className={`piece-wrapper flex items-center justify-center w-full h-full transition-transform duration-150 hover:scale-105 ${
+            isBeingCaptured ? "pointer-events-none" : ""
+          }`}
+          style={isBeingCaptured ? {
+            animation: "captureFade 80ms ease-out forwards",
+          } : {}}
+        >
           <Piece piece={piece} />
         </div>
       )}

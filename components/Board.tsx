@@ -125,13 +125,21 @@ export default function Board({
 
       if (isLegal) {
         const movingPiece = game.get(selected);
+        const targetPiece = game.get(square);
         const pieceStr = movingPiece
           ? movingPiece.color === "w"
             ? movingPiece.type.toUpperCase()
             : movingPiece.type
           : "";
+        
+        // Check if it's a capture
+        const isCapture = !!targetPiece;
+        
+        // Check for castling
+        const isCastling = movingPiece?.type === "k" && 
+          Math.abs(selected.charCodeAt(0) - square.charCodeAt(0)) === 2;
 
-        animateMove(selected, square, pieceStr, () => {
+        animateMove(selected, square, pieceStr, isCapture, () => {
           const move = game.move(moveAttempt);
           if (move) {
             setLastMove({ from: selected, to: square });
@@ -139,6 +147,18 @@ export default function Board({
             setLegalSquares([]);
             setFen(game.fen());
             if (onMove) onMove({ from: selected, to: square, san: move.san });
+            
+            // Play appropriate sound
+            if (game.inCheck()) {
+              playSound("check");
+            } else if (isCastling) {
+              playSound("castle");
+            } else if (isCapture) {
+              playSound("capture");
+            } else {
+              playSound("move");
+            }
+            
             triggerAiMove(game.fen());
           }
         });
@@ -183,12 +203,33 @@ export default function Board({
             aiMove.color === "w"
               ? aiMove.piece.toUpperCase()
               : aiMove.piece;
+          
+          const isCapture = !!aiMove.captured;
+          const isCastling = aiMove.piece === "k" && 
+            Math.abs(aiMove.from.charCodeAt(0) - aiMove.to.charCodeAt(0)) === 2;
 
-          animateMove(aiMove.from, aiMove.to, aiPiece, () => {
+          animateMove(aiMove.from, aiMove.to, aiPiece, isCapture, () => {
             setLastMove({ from: aiMove.from, to: aiMove.to });
             setFen(data.fen);
             if (onMove)
               onMove({ from: aiMove.from, to: aiMove.to, san: data.move });
+            
+            // Play appropriate sound for AI move
+            const checkGame = new Chess(data.fen);
+            if (checkGame.inCheck()) {
+              playSound("check");
+            } else if (isCastling) {
+              playSound("castle");
+            } else if (isCapture) {
+              playSound("capture");
+            } else {
+              playSound("move");
+            }
+            
+            // Update evaluation if callback provided
+            if (onEvalUpdate && data.evaluation !== undefined) {
+              onEvalUpdate(data.evaluation, data.depth);
+            }
           });
         } else {
           setFen(data.fen);
@@ -242,10 +283,10 @@ export default function Board({
       <div
         className={`board grid grid-cols-8 gap-0 overflow-hidden transition-opacity duration-300 ${
           isGameOver ? "opacity-75" : ""
-        }`}
+        } ${isThinking ? "cursor-wait" : ""}`}
         style={{
-          width: "min(70vh, 560px)",
-          height: "min(70vh, 560px)",
+          width: "min(calc(100vw - 2rem), 70vh, 560px)",
+          height: "min(calc(100vw - 2rem), 70vh, 560px)",
           border: "6px solid #4b3621",
           borderRadius: "4px",
           boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
@@ -256,6 +297,7 @@ export default function Board({
             animatingPiece && animatingPiece.from === s.square;
           const isAnimatingTo =
             animatingPiece && animatingPiece.to === s.square;
+          const isBeingCaptured = capturingSquare === s.square;
 
           let displayPiece = s.piece
             ? s.color === "w"
@@ -269,7 +311,7 @@ export default function Board({
           }
 
           // Show animating piece at destination with offset
-          if (isAnimatingTo) {
+          if (isAnimatingTo && !isBeingCaptured) {
             displayPiece = animatingPiece.piece;
           }
 
@@ -285,6 +327,7 @@ export default function Board({
                   (lastMove.from === s.square || lastMove.to === s.square)
                 }
                 isCheck={kingInCheck === s.square}
+                isBeingCaptured={isBeingCaptured}
                 onClick={() => onSquareClick(s.square)}
               />
               {/* Animating piece overlay */}
@@ -303,7 +346,7 @@ export default function Board({
       </div>
 
       {/* File labels */}
-      <div className="flex justify-around mt-1 px-1" style={{ width: "min(70vh, 560px)" }}>
+      <div className="flex justify-around mt-1 px-1" style={{ width: "min(calc(100vw - 2rem), 70vh, 560px)" }}>
         {["a", "b", "c", "d", "e", "f", "g", "h"].map((f) => (
           <span key={f} className="text-xs font-medium text-gray-400 uppercase">
             {f}
@@ -314,7 +357,7 @@ export default function Board({
       {/* Rank labels */}
       <div
         className="absolute left-0 top-0 flex flex-col justify-around h-full py-1 -ml-4"
-        style={{ height: "min(70vh, 560px)" }}
+        style={{ height: "min(calc(100vw - 2rem), 70vh, 560px)" }}
       >
         {[8, 7, 6, 5, 4, 3, 2, 1].map((r) => (
           <span key={r} className="text-xs font-medium text-gray-400">

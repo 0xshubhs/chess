@@ -5,6 +5,7 @@ import Board from "../components/Board";
 import Controls from "../components/Controls";
 import PlayerPanel from "../components/PlayerPanel";
 import MoveList from "../components/MoveList";
+import EvalBar from "../components/EvalBar";
 import { Chess } from "chess.js";
 
 export default function Page() {
@@ -14,6 +15,10 @@ export default function Page() {
   const [elo, setElo] = useState<number>(1200);
   const [moves, setMoves] = useState<string[]>([]);
   const [isAiThinking, setIsAiThinking] = useState(false);
+  const [soundEnabled, setSoundEnabled] = useState(true);
+  const [evaluation, setEvaluation] = useState(0);
+  const [evalDepth, setEvalDepth] = useState<number | undefined>();
+  const [moveDrawerOpen, setMoveDrawerOpen] = useState(false);
 
   const game = useMemo(() => new Chess(fen), [fen]);
 
@@ -70,11 +75,19 @@ export default function Page() {
 
   const handleNewGame = useCallback(() => {
     setMoves([]);
+    setEvaluation(0);
+    setEvalDepth(undefined);
   }, []);
 
   // Watch for AI thinking state
   const handleSetFen = useCallback((newFen: string) => {
     setFen(newFen);
+  }, []);
+
+  // Handle eval updates from engine
+  const handleEvalUpdate = useCallback((eval_: number, depth?: number) => {
+    setEvaluation(eval_);
+    if (depth !== undefined) setEvalDepth(depth);
   }, []);
 
   // Determine if game is over
@@ -93,6 +106,7 @@ export default function Page() {
           materialAdvantage={blackAdvantage}
         />
 
+        {/* Desktop move list */}
         <div className="hidden lg:block">
           <MoveList moves={moves} statusMsg={statusMsg} />
         </div>
@@ -105,8 +119,16 @@ export default function Page() {
         />
       </div>
 
-      {/* Board */}
-      <div className="board-wrapper order-1 lg:order-2 pl-4">
+      {/* Board with Eval Bar */}
+      <div className="board-wrapper order-1 lg:order-2 flex items-start gap-2">
+        {/* Eval Bar - left of board */}
+        <div className="hidden sm:block">
+          <EvalBar 
+            evaluation={evaluation} 
+            depth={evalDepth}
+          />
+        </div>
+        
         <Board
           fen={fen}
           setFen={handleSetFen}
@@ -114,6 +136,8 @@ export default function Page() {
           elo={elo}
           setTurn={setTurn}
           onMove={handleMove}
+          soundEnabled={soundEnabled}
+          onEvalUpdate={handleEvalUpdate}
         />
       </div>
 
@@ -127,13 +151,44 @@ export default function Page() {
           setElo={setElo}
           onNewGame={handleNewGame}
           isGameOver={isGameOver}
+          soundEnabled={soundEnabled}
+          onSoundToggle={() => setSoundEnabled(!soundEnabled)}
         />
 
-        {/* Mobile move list */}
+        {/* Mobile move drawer toggle */}
         <div className="lg:hidden">
+          <button
+            onClick={() => setMoveDrawerOpen(!moveDrawerOpen)}
+            className="w-full px-4 py-2.5 bg-[#262626] hover:bg-[#333] text-gray-300 font-medium text-sm rounded-lg transition-colors flex items-center justify-center gap-2"
+          >
+            <span>Moves</span>
+            <span className="text-xs">{moveDrawerOpen ? "▲" : "▼"}</span>
+            {moves.length > 0 && (
+              <span className="bg-gray-600 px-1.5 py-0.5 rounded text-xs">{moves.length}</span>
+            )}
+          </button>
+        </div>
+      </div>
+
+      {/* Mobile Move Drawer */}
+      <div 
+        className={`move-drawer lg:hidden bg-[#1e1f23] border-t border-gray-700 shadow-2xl ${
+          moveDrawerOpen ? "open" : ""
+        }`}
+      >
+        <div className="move-drawer-handle" onClick={() => setMoveDrawerOpen(false)} />
+        <div className="px-4 pb-6 max-h-[55vh] overflow-hidden">
           <MoveList moves={moves} statusMsg={statusMsg} />
         </div>
       </div>
+
+      {/* Backdrop for drawer */}
+      {moveDrawerOpen && (
+        <div 
+          className="lg:hidden fixed inset-0 bg-black/50 z-40"
+          onClick={() => setMoveDrawerOpen(false)}
+        />
+      )}
     </div>
   );
 }

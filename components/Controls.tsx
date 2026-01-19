@@ -11,6 +11,8 @@ type Props = {
   setElo: (elo: number) => void;
   onNewGame?: () => void;
   isGameOver?: boolean;
+  soundEnabled?: boolean;
+  onSoundToggle?: () => void;
 };
 
 export default function Controls({
@@ -21,6 +23,8 @@ export default function Controls({
   setElo,
   onNewGame,
   isGameOver = false,
+  soundEnabled = true,
+  onSoundToggle,
 }: Props) {
   const [showTooltip, setShowTooltip] = useState(false);
 
@@ -126,7 +130,7 @@ export default function Controls({
         <button
           onClick={undo}
           disabled={isGameOver}
-          className={`flex-1 px-4 py-2.5 font-semibold text-sm rounded-lg transition-colors border
+          className={`btn-outline flex-1 px-4 py-2.5 font-semibold text-sm rounded-lg transition-colors border
             ${isGameOver 
               ? "border-gray-600 text-gray-500 cursor-not-allowed" 
               : "border-gray-500 text-gray-300 hover:bg-gray-700 hover:border-gray-400"
@@ -135,6 +139,17 @@ export default function Controls({
           Undo
         </button>
       </div>
+
+      {/* Sound toggle */}
+      {onSoundToggle && (
+        <button
+          onClick={onSoundToggle}
+          className="w-full px-4 py-2 bg-[#262626] hover:bg-[#333] text-gray-300 font-medium text-sm rounded-lg transition-colors flex items-center justify-center gap-2"
+        >
+          <span>{soundEnabled ? "🔊" : "🔇"}</span>
+          <span>Sound {soundEnabled ? "On" : "Off"}</span>
+        </button>
+      )}
     </div>
   );
 }
