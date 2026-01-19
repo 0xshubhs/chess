@@ -77,6 +77,9 @@ export default function Page() {
     setFen(newFen);
   }, []);
 
+  // Determine if game is over
+  const isGameOver = game.isGameOver();
+
   return (
     <div className="game-container flex flex-col lg:flex-row items-start justify-center gap-4 lg:gap-6 p-2 lg:p-4">
       {/* Left side panel (shows on top on mobile) */}
@@ -84,19 +87,19 @@ export default function Page() {
         <PlayerPanel
           name="Ollama AI"
           isAI
-          isActive={turn === "b"}
+          isActive={turn === "b" && !isGameOver}
           isThinking={isAiThinking}
           capturedPieces={blackCaptured}
           materialAdvantage={blackAdvantage}
         />
 
         <div className="hidden lg:block">
-          <MoveList moves={moves} />
+          <MoveList moves={moves} statusMsg={statusMsg} />
         </div>
 
         <PlayerPanel
           name="You"
-          isActive={turn === "w"}
+          isActive={turn === "w" && !isGameOver}
           capturedPieces={whiteCaptured}
           materialAdvantage={whiteAdvantage}
         />
@@ -123,11 +126,12 @@ export default function Page() {
           elo={elo}
           setElo={setElo}
           onNewGame={handleNewGame}
+          isGameOver={isGameOver}
         />
 
         {/* Mobile move list */}
         <div className="lg:hidden">
-          <MoveList moves={moves} />
+          <MoveList moves={moves} statusMsg={statusMsg} />
         </div>
       </div>
     </div>

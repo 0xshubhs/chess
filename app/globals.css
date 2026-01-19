@@ -3,6 +3,18 @@
 :root {
   --background: #1e1f23;
   --foreground: #ededed;
+  
+  /* Unified animation system */
+  --move-duration: 180ms;
+  --move-ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --capture-delay: 80ms;
+  --highlight-duration: 200ms;
+  --eval-duration: 400ms;
+  
+  /* Touch affordances */
+  --touch-target-min: 44px;
+  --legal-dot-size: 28%;
+  --legal-dot-size-mobile: 36%;
 }
 
 @theme inline {
@@ -16,6 +28,8 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans), "Inter", "SF Pro", "Roboto", Arial, Helvetica, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 
 /* Main layout */
@@ -68,6 +82,31 @@ main {
   }
   to {
     transform: translate(0, 0);
+  }
+}
+
+/* Capture animation */
+@keyframes captureFade {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0.7);
+    opacity: 0;
+  }
+}
+
+/* Check pulse - single pulse, not infinite */
+@keyframes checkPulse {
+  0% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.7;
   }
 }
 
@@ -168,11 +207,70 @@ input[type="range"]::-moz-range-thumb {
   max-width: 260px;
 }
 
-@media (max-width: 1024px) {
+/* Mobile-first responsive layout */
+@media (max-width: 900px) {
   .side-panel {
     max-width: 100%;
   }
   
+  .game-container {
+    flex-direction: column;
+    align-items: center;
+    padding: 0.5rem;
+  }
+  
+  .board-wrapper {
+    padding-left: 1rem;
+    width: 100%;
+    display: flex;
+    justify-content: center;
+  }
+  
+  /* Larger touch targets on mobile */
+  .square {
+    min-width: var(--touch-target-min);
+    min-height: var(--touch-target-min);
+  }
+  
+  /* Larger legal move dots on mobile */
+  .legal-dot {
+    width: var(--legal-dot-size-mobile) !important;
+    height: var(--legal-dot-size-mobile) !important;
+  }
+  
+  /* Move drawer base styles for mobile */
+  .move-drawer {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    max-height: 60vh;
+    transform: translateY(100%);
+    transition: transform 0.3s var(--move-ease);
+    z-index: 50;
+    border-radius: 16px 16px 0 0;
+  }
+  
+  .move-drawer.open {
+    transform: translateY(0);
+  }
+  
+  .move-drawer-handle {
+    width: 40px;
+    height: 4px;
+    background: #4b5563;
+    border-radius: 2px;
+    margin: 8px auto;
+  }
+}
+
+@media (min-width: 901px) and (max-width: 1024px) {
+  .side-panel {
+    max-width: 220px;
+  }
+}
+
+@media (max-width: 1024px) {
   .game-container {
     flex-direction: column;
     align-items: center;
@@ -181,7 +279,7 @@ input[type="range"]::-moz-range-thumb {
 
 /* Player panel active glow */
 .player-panel {
-  transition: all 0.2s ease;
+  transition: all var(--move-duration) var(--move-ease);
 }
 
 /* Button hover effects */
@@ -189,12 +287,53 @@ button {
   transition: all 0.15s ease;
 }
 
+button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
 button:active {
+  transform: scale(0.98) translateY(0);
+  box-shadow: none;
+}
+
+/* Outline button specific */
+button.btn-outline:hover {
+  transform: translateY(-1px);
+}
+
+button.btn-outline:active {
   transform: scale(0.98);
 }
 
 /* Move list styling */
 .move-list {
   font-variant-numeric: tabular-nums;
+}
+
+/* Smooth scrolling for move list */
+.move-list-scroll {
+  scroll-behavior: smooth;
+}
+
+/* Eval bar */
+.eval-bar-container {
+  position: relative;
+}
+
+/* Captured pieces animation */
+@keyframes pieceCapture {
+  from {
+    opacity: 0;
+    transform: scale(1.2);
+  }
+  to {
+    opacity: 0.8;
+    transform: scale(1);
+  }
+}
+
+.captured-piece {
+  animation: pieceCapture 0.2s var(--move-ease);
 }
 

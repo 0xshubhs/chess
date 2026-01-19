@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useState, useCallback } from "react";
 import { Chess, Move, Square as ChessSquare } from "chess.js";
 import Square from "./Square";
+import { useSoundEffects } from "../hooks/useSoundEffects";
 
 type Props = {
   fen: string;
@@ -11,6 +12,8 @@ type Props = {
   elo: number;
   setTurn?: (t: string) => void;
   onMove?: (move: { from: string; to: string; san: string }) => void;
+  soundEnabled?: boolean;
+  onEvalUpdate?: (evaluation: number, depth?: number) => void;
 };
 
 type LastMove = {
@@ -18,22 +21,36 @@ type LastMove = {
   to: ChessSquare;
 };
 
+type AnimatingPiece = {
+  piece: string;
+  from: ChessSquare;
+  to: ChessSquare;
+  isCapture?: boolean;
+};
+
 function useChess(fen: string) {
   const game = useMemo(() => new Chess(fen), [fen]);
   return game;
 }
 
-export default function Board({ fen, setFen, setStatusMsg, elo, setTurn, onMove }: Props) {
+export default function Board({ 
+  fen, 
+  setFen, 
+  setStatusMsg, 
+  elo, 
+  setTurn, 
+  onMove,
+  soundEnabled = true,
+  onEvalUpdate 
+}: Props) {
   const [selected, setSelected] = useState<ChessSquare | null>(null);
   const [legalSquares, setLegalSquares] = useState<ChessSquare[]>([]);
   const [isThinking, setIsThinking] = useState(false);
   const [lastMove, setLastMove] = useState<LastMove | null>(null);
-  const [animatingPiece, setAnimatingPiece] = useState<{
-    piece: string;
-    from: ChessSquare;
-    to: ChessSquare;
-  } | null>(null);
+  const [animatingPiece, setAnimatingPiece] = useState<AnimatingPiece | null>(null);
+  const [capturingSquare, setCapturingSquare] = useState<ChessSquare | null>(null);
 
+  const { playSound } = useSoundEffects(soundEnabled, 0.3);
   const game = useChess(fen);
 
   // Find king square if in check
@@ -54,26 +71,48 @@ export default function Board({ fen, setFen, setStatusMsg, elo, setTurn, onMove 
 
   useEffect(() => {
     if (setTurn) setTurn(game.turn());
-    if (game.isCheckmate()) setStatusMsg("Checkmate");
-    else if (game.isStalemate()) setStatusMsg("Stalemate");
-    else if (game.isDraw()) setStatusMsg("Draw");
-    else if (game.inCheck()) setStatusMsg("Check");
+    if (game.isCheckmate()) {
+      setStatusMsg("Checkmate");
+      playSound("gameEnd");
+    }
+    else if (game.isStalemate()) {
+      setStatusMsg("Stalemate");
+      playSound("gameEnd");
+    }
+    else if (game.isDraw()) {
+      setStatusMsg("Draw");
+      playSound("gameEnd");
+    }
+    else if (game.inCheck()) {
+      setStatusMsg("Check");
+    }
     else setStatusMsg("");
-  }, [fen, game, setTurn, setStatusMsg]);
+  }, [fen, game, setTurn, setStatusMsg, playSound]);
 
   const animateMove = useCallback(
-    (from: ChessSquare, to: ChessSquare, piece: string, callback: () => void) => {
-      setAnimatingPiece({ piece, from, to });
+    (from: ChessSquare, to: ChessSquare, piece: string, isCapture: boolean, callback: () => void) => {
+      setAnimatingPiece({ piece, from, to, isCapture });
+      
+      // If capture, delay the captured piece fade
+      if (isCapture) {
+        setCapturingSquare(to);
+        // Remove captured piece after delay
+        setTimeout(() => {
+          setCapturingSquare(null);
+        }, 80); // --capture-delay
+      }
+      
       setTimeout(() => {
         setAnimatingPiece(null);
         callback();
-      }, 180);
+      }, 180); // --move-duration
     },
     []
   );
 
   function onSquareClick(square: ChessSquare) {
-    if (isThinking || animatingPiece) return;
+    // Disable clicks when thinking, animating, or game is over
+    if (isThinking || animatingPiece || game.isGameOver()) return;
 
     const piece = game.get(square);
 
@@ -195,10 +234,15 @@ export default function Board({ fen, setFen, setStatusMsg, elo, setTurn, onMove 
     };
   };
 
+  // Check if game is over
+  const isGameOver = game.isGameOver();
+
   return (
     <div className="board-container relative">
       <div
-        className="board grid grid-cols-8 gap-0 overflow-hidden"
+        className={`board grid grid-cols-8 gap-0 overflow-hidden transition-opacity duration-300 ${
+          isGameOver ? "opacity-75" : ""
+        }`}
         style={{
           width: "min(70vh, 560px)",
           height: "min(70vh, 560px)",
