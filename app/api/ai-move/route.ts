@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import { Chess } from "chess.js";
-import { spawnSync } from "child_process";
 import { mapEloToTemperature, pickMoveByProbability } from "../../../utils/elo";
+
+const OLLAMA_URL = process.env.OLLAMA_URL || "http://localhost:11434";
+const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "llama3.2:latest";
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
 export async function POST(req: Request) {
   const body = await req.json();
@@ -32,38 +35,25 @@ export async function POST(req: Request) {
     };
   });
 
-  // Convert to prompt for Ollama — include only legal moves and their simple scores.
   const temperature = mapEloToTemperature(elo);
-
   const prompt = buildPrompt(fen, evaluated, temperature);
-
-  // Run Ollama CLI synchronously (server environment) — make sure OLLAMA_BIN is in PATH or set in env.
-  const ollama = process.env.OLLAMA_BIN || "ollama";
-  const model = process.env.OLLAMA_MODEL || "llama2";
 
   let chosenUci: string;
 
   try {
-    const result = spawnSync(ollama, ["run", model], {
-      input: prompt,
-      encoding: "utf-8",
-      maxBuffer: 10_000_000,
-      timeout: 60000, // 60 second timeout
-    });
+    // Try Ollama first (local), then Gemini (deployed)
+    let llmResponse: string | null = null;
 
-    if (result.error) {
-      console.error("Ollama error:", result.error);
-      // Fallback to local probability-based selection
-      chosenUci = pickMoveByProbability(
-        evaluated.map((e) => ({ uci: e.uci, score: e.score })),
-        temperature
-      );
+    if (!GEMINI_API_KEY) {
+      // Use Ollama locally
+      llmResponse = await callOllama(prompt, temperature);
     } else {
-      const stdout = result.stdout?.trim();
-      // Attempt to parse the chosen move from output — be permissive
-      const chosen = parseMoveFromOutput(stdout);
+      // Use Gemini API for deployed version
+      llmResponse = await callGemini(prompt, temperature);
+    }
 
-      // Validate chosen move
+    if (llmResponse) {
+      const chosen = parseMoveFromOutput(llmResponse);
       const legalUCIs = evaluated.map((e) => e.uci);
 
       chosenUci = chosen;
@@ -80,10 +70,15 @@ export async function POST(req: Request) {
           temperature
         );
       }
+    } else {
+      // LLM failed, use fallback
+      chosenUci = pickMoveByProbability(
+        evaluated.map((e) => ({ uci: e.uci, score: e.score })),
+        temperature
+      );
     }
   } catch (err) {
-    console.error("Ollama execution failed:", err);
-    // Fallback to local probability-based selection
+    console.error("LLM execution failed:", err);
     chosenUci = pickMoveByProbability(
       evaluated.map((e) => ({ uci: e.uci, score: e.score })),
       temperature
@@ -104,6 +99,67 @@ export async function POST(req: Request) {
   }
 
   return NextResponse.json({ move: applied.san, fen: game.fen() });
+}
+
+async function callOllama(prompt: string, temperature: number): Promise<string | null> {
+  try {
+    const response = await fetch(`${OLLAMA_URL}/api/generate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: OLLAMA_MODEL,
+        prompt,
+        stream: false,
+        options: {
+          temperature: Math.max(0.1, temperature),
+          num_predict: 20,
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      console.error("Ollama API error:", response.status);
+      return null;
+    }
+
+    const data = await response.json();
+    return data.response?.trim() || null;
+  } catch (err) {
+    console.error("Ollama fetch error:", err);
+    return null;
+  }
+}
+
+async function callGemini(prompt: string, temperature: number): Promise<string | null> {
+  if (!GEMINI_API_KEY) return null;
+
+  try {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: Math.max(0.1, temperature),
+            maxOutputTokens: 20,
+          },
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      console.error("Gemini API error:", response.status);
+      return null;
+    }
+
+    const data = await response.json();
+    return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || null;
+  } catch (err) {
+    console.error("Gemini fetch error:", err);
+    return null;
+  }
 }
 
 function buildPrompt(
