@@ -297,6 +297,24 @@ button:active {
   box-shadow: none;
 }
 
+/* Focus states for accessibility */
+button:focus-visible,
+.square:focus-visible {
+  outline: 2px solid #60a5fa;
+  outline-offset: 2px;
+}
+
+/* Reduce motion for accessibility */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
 /* Outline button specific */
 button.btn-outline:hover {
   transform: translateY(-1px);
@@ -335,5 +353,14 @@ button.btn-outline:active {
 
 .captured-piece {
   animation: pieceCapture 0.2s var(--move-ease);
+}
+
+/* Mobile drawer backdrop - ensure proper z-index hierarchy */
+.move-drawer-backdrop {
+  z-index: 45;
+}
+
+.move-drawer {
+  z-index: 50;
 }
 

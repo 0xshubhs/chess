@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { memo } from "react";
 import Piece from "./Piece";
 
 type Props = {
@@ -14,7 +14,7 @@ type Props = {
   onClick?: () => void;
 };
 
-export default function Square({
+const Square = memo(function Square({
   square,
   piece,
   isSelected,
@@ -28,10 +28,8 @@ export default function Square({
   const rank = parseInt(square[1], 10);
   const isLight = (file + rank) % 2 === 0;
 
-  // Chess.com style colors
-  const lightSquare = "#f0d9b5";
-  const darkSquare = "#b58863";
-  const bgColor = isLight ? lightSquare : darkSquare;
+  // Chess.com style colors - extracted as constants to avoid recalculation
+  const bgColor = isLight ? "#f0d9b5" : "#b58863";
 
   return (
     <div
@@ -105,11 +103,13 @@ export default function Square({
           }`}
           style={isBeingCaptured ? {
             animation: "captureFade 80ms ease-out forwards",
-          } : {}}
+          } : undefined}
         >
           <Piece piece={piece} />
         </div>
       )}
     </div>
   );
-}
+});
+
+export default Square;

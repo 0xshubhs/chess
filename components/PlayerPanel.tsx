@@ -2,14 +2,19 @@
 
 import React from "react";
 
-type Props = {
+interface PlayerPanelProps {
   name: string;
   isAI?: boolean;
   isActive: boolean;
   isThinking?: boolean;
   capturedPieces?: string[];
   materialAdvantage?: number;
-};
+  time?: string;
+  isTimeLow?: boolean;
+  isTimeCritical?: boolean;
+  isUnlimitedTime?: boolean;
+  color: "white" | "black";
+}
 
 export default function PlayerPanel({
   name,
@@ -18,7 +23,12 @@ export default function PlayerPanel({
   isThinking = false,
   capturedPieces = [],
   materialAdvantage = 0,
-}: Props) {
+  time,
+  isTimeLow = false,
+  isTimeCritical = false,
+  isUnlimitedTime = false,
+  color,
+}: PlayerPanelProps) {
   return (
     <div
       className={`player-panel flex items-center gap-3 p-3 rounded-lg transition-all duration-200 ${
@@ -30,10 +40,10 @@ export default function PlayerPanel({
       {/* Avatar */}
       <div
         className={`w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold ${
-          isAI ? "bg-purple-600" : "bg-green-600"
+          isAI ? "bg-purple-600" : color === "white" ? "bg-gray-100" : "bg-gray-800"
         }`}
       >
-        {isAI ? "🤖" : "👤"}
+        {isAI ? "🤖" : color === "white" ? "♔" : "♚"}
       </div>
 
       {/* Info */}
@@ -62,8 +72,25 @@ export default function PlayerPanel({
         </div>
       </div>
 
-      {/* Active indicator */}
-      {isActive && (
+      {/* Timer */}
+      {!isUnlimitedTime && time && (
+        <div
+          className={`px-3 py-1.5 rounded-lg font-mono text-lg font-bold min-w-[70px] text-center transition-colors ${
+            isTimeCritical
+              ? "bg-red-600 text-white animate-pulse"
+              : isTimeLow
+              ? "bg-yellow-600/80 text-white"
+              : isActive
+              ? "bg-gray-700 text-white"
+              : "bg-[#333] text-gray-400"
+          }`}
+        >
+          {time}
+        </div>
+      )}
+
+      {/* Active indicator (only if no timer shown) */}
+      {(isUnlimitedTime || !time) && isActive && (
         <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
       )}
     </div>

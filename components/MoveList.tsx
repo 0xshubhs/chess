@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useRef, useEffect } from "react";
+import React, { useRef, useEffect, useCallback, useMemo } from "react";
 
 type MoveEntry = {
   moveNumber: number;
@@ -17,29 +17,52 @@ type Props = {
 export default function MoveList({ moves, statusMsg, onMoveClick }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const lastMoveRef = useRef<HTMLDivElement>(null);
+  const scrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Group moves into pairs (white, black)
-  const movePairs: MoveEntry[] = [];
-  for (let i = 0; i < moves.length; i += 2) {
-    movePairs.push({
-      moveNumber: Math.floor(i / 2) + 1,
-      white: moves[i],
-      black: moves[i + 1],
-    });
-  }
+  // Memoize move pairs to avoid recalculating on every render
+  const movePairs: MoveEntry[] = useMemo(() => {
+    const pairs: MoveEntry[] = [];
+    for (let i = 0; i < moves.length; i += 2) {
+      pairs.push({
+        moveNumber: Math.floor(i / 2) + 1,
+        white: moves[i],
+        black: moves[i + 1],
+      });
+    }
+    return pairs;
+  }, [moves]);
 
   const lastMoveIndex = moves.length - 1;
   const isWhiteLastMove = lastMoveIndex % 2 === 0;
 
-  // Auto-scroll to last move with smooth behavior
-  useEffect(() => {
-    if (lastMoveRef.current && scrollRef.current) {
-      lastMoveRef.current.scrollIntoView({ 
-        behavior: "smooth", 
-        block: "nearest" 
-      });
+  // Scroll to last move with cleanup
+  const scrollToLastMove = useCallback(() => {
+    if (scrollTimeoutRef.current) {
+      clearTimeout(scrollTimeoutRef.current);
     }
-  }, [moves]);
+    scrollTimeoutRef.current = setTimeout(() => {
+      if (lastMoveRef.current && scrollRef.current) {
+        lastMoveRef.current.scrollIntoView({ 
+          behavior: "smooth",
+          block: "nearest" 
+        });
+      }
+    }, 100);
+  }, []);
+  
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  // Auto-scroll to last move with debounce
+  useEffect(() => {
+    scrollToLastMove();
+  }, [moves.length, scrollToLastMove]);
 
   if (moves.length === 0) {
     return (

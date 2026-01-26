@@ -1,19 +1,29 @@
 "use client";
 
-import React, { useEffect, useMemo, useState, useCallback } from "react";
-import { Chess, Move, Square as ChessSquare } from "chess.js";
+import React, { useEffect, useMemo, useState, useCallback, useRef, MutableRefObject } from "react";
+import { Chess, Move, Square as ChessSquare, Color } from "chess.js";
 import Square from "./Square";
+import PromotionDialog from "./PromotionDialog";
 import { useSoundEffects } from "../hooks/useSoundEffects";
+
+export type GameMode = "ai" | "pvp";
+
+type PromotionPiece = "q" | "r" | "b" | "n";
 
 type Props = {
   fen: string;
   setFen: (fen: string) => void;
   setStatusMsg: (s: string) => void;
   elo: number;
-  setTurn?: (t: string) => void;
+  setTurn?: (t: Color) => void;
   onMove?: (move: { from: string; to: string; san: string }) => void;
   soundEnabled?: boolean;
   onEvalUpdate?: (evaluation: number, depth?: number) => void;
+  gameMode?: GameMode;
+  onGameOver?: (isOver: boolean) => void;
+  onThinkingChange?: (isThinking: boolean) => void;
+  abortControllerRef?: MutableRefObject<AbortController | null>;
+  isFlipped?: boolean;
 };
 
 type LastMove = {
@@ -28,10 +38,11 @@ type AnimatingPiece = {
   isCapture?: boolean;
 };
 
-function useChess(fen: string) {
-  const game = useMemo(() => new Chess(fen), [fen]);
-  return game;
-}
+type PendingPromotion = {
+  from: ChessSquare;
+  to: ChessSquare;
+  color: "w" | "b";
+};
 
 export default function Board({ 
   fen, 
@@ -41,17 +52,53 @@ export default function Board({
   setTurn, 
   onMove,
   soundEnabled = true,
-  onEvalUpdate 
+  onEvalUpdate,
+  gameMode = "ai",
+  onGameOver,
+  onThinkingChange,
+  abortControllerRef,
+  isFlipped = false
 }: Props) {
   const [selected, setSelected] = useState<ChessSquare | null>(null);
-  const [legalSquares, setLegalSquares] = useState<ChessSquare[]>([]);
+  const [legalSquaresArray, setLegalSquaresArray] = useState<ChessSquare[]>([]);
   const [isThinking, setIsThinking] = useState(false);
+  
+  // Use Set for O(1) lookup instead of O(n) array.includes
+  const legalSquares = useMemo(() => new Set(legalSquaresArray), [legalSquaresArray]);
   const [lastMove, setLastMove] = useState<LastMove | null>(null);
   const [animatingPiece, setAnimatingPiece] = useState<AnimatingPiece | null>(null);
   const [capturingSquare, setCapturingSquare] = useState<ChessSquare | null>(null);
+  const [pendingPromotion, setPendingPromotion] = useState<PendingPromotion | null>(null);
+  
+  // Keep a stable ref to the current FEN for async operations
+  const fenRef = useRef(fen);
+  fenRef.current = fen;
+  
+  // Track previous FEN to detect new game reset
+  const prevFenRef = useRef(fen);
 
-  const { playSound } = useSoundEffects(soundEnabled, 0.3);
-  const game = useChess(fen);
+  const { playSound } = useSoundEffects(soundEnabled);
+  
+  // Create game instance - memoized on fen
+  const game = useMemo(() => new Chess(fen), [fen]);
+  
+  // Reset board state when a new game starts (FEN changes to initial position)
+  useEffect(() => {
+    const INITIAL_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+    const isNewGame = fen === INITIAL_FEN && prevFenRef.current !== INITIAL_FEN;
+    
+    if (isNewGame) {
+      // Clear all board visual state
+      setLastMove(null);
+      setSelected(null);
+      setLegalSquaresArray([]);
+      setAnimatingPiece(null);
+      setCapturingSquare(null);
+      setPendingPromotion(null);
+    }
+    
+    prevFenRef.current = fen;
+  }, [fen]);
 
   // Find king square if in check
   const kingInCheck = useMemo(() => {
@@ -71,6 +118,10 @@ export default function Board({
 
   useEffect(() => {
     if (setTurn) setTurn(game.turn());
+    
+    const isOver = game.isGameOver();
+    if (onGameOver) onGameOver(isOver);
+    
     if (game.isCheckmate()) {
       setStatusMsg("Checkmate");
       playSound("gameEnd");
@@ -87,7 +138,7 @@ export default function Board({
       setStatusMsg("Check");
     }
     else setStatusMsg("");
-  }, [fen, game, setTurn, setStatusMsg, playSound]);
+  }, [fen, game, setTurn, setStatusMsg, playSound, onGameOver]);
 
   const animateMove = useCallback(
     (from: ChessSquare, to: ChessSquare, piece: string, isCapture: boolean, callback: () => void) => {
@@ -111,13 +162,12 @@ export default function Board({
   );
 
   function onSquareClick(square: ChessSquare) {
-    // Disable clicks when thinking, animating, or game is over
-    if (isThinking || animatingPiece || game.isGameOver()) return;
+    // Disable clicks when thinking, animating, game is over, or promotion dialog is open
+    if (isThinking || animatingPiece || game.isGameOver() || pendingPromotion) return;
 
     const piece = game.get(square);
 
     if (selected) {
-      const moveAttempt = { from: selected, to: square, promotion: "q" as const };
       const legalMoves = game.moves({ verbose: true });
       const isLegal = legalMoves.some(
         (m) => m.from === selected && m.to === square
@@ -125,72 +175,133 @@ export default function Board({
 
       if (isLegal) {
         const movingPiece = game.get(selected);
-        const targetPiece = game.get(square);
-        const pieceStr = movingPiece
-          ? movingPiece.color === "w"
-            ? movingPiece.type.toUpperCase()
-            : movingPiece.type
-          : "";
         
-        // Check if it's a capture
-        const isCapture = !!targetPiece;
-        
-        // Check for castling
-        const isCastling = movingPiece?.type === "k" && 
-          Math.abs(selected.charCodeAt(0) - square.charCodeAt(0)) === 2;
+        // Check if this is a pawn promotion move
+        const isPromotion = movingPiece?.type === "p" && 
+          ((movingPiece.color === "w" && square[1] === "8") ||
+           (movingPiece.color === "b" && square[1] === "1"));
 
-        animateMove(selected, square, pieceStr, isCapture, () => {
-          const move = game.move(moveAttempt);
-          if (move) {
-            setLastMove({ from: selected, to: square });
-            setSelected(null);
-            setLegalSquares([]);
-            setFen(game.fen());
-            if (onMove) onMove({ from: selected, to: square, san: move.san });
-            
-            // Play appropriate sound
-            if (game.inCheck()) {
-              playSound("check");
-            } else if (isCastling) {
-              playSound("castle");
-            } else if (isCapture) {
-              playSound("capture");
-            } else {
-              playSound("move");
-            }
-            
-            triggerAiMove(game.fen());
-          }
-        });
+        if (isPromotion) {
+          // Show promotion dialog
+          setPendingPromotion({
+            from: selected,
+            to: square,
+            color: movingPiece!.color,
+          });
+          return;
+        }
+
+        // Execute the move
+        executeMove(selected, square);
       } else {
         if (piece && piece.color === game.turn()) {
           setSelected(square);
           const moves = game.moves({ square, verbose: true }) as Move[];
-          setLegalSquares(moves.map((m) => m.to));
+          setLegalSquaresArray(moves.map((m) => m.to));
         } else {
           setSelected(null);
-          setLegalSquares([]);
+          setLegalSquaresArray([]);
         }
       }
     } else {
       if (piece && piece.color === game.turn()) {
         setSelected(square);
         const moves = game.moves({ square, verbose: true }) as Move[];
-        setLegalSquares(moves.map((m) => m.to));
+        setLegalSquaresArray(moves.map((m) => m.to));
       }
     }
+  }
+
+  function executeMove(from: ChessSquare, to: ChessSquare, promotion?: PromotionPiece) {
+    // Create fresh game instance for the move to avoid stale closure issues
+    const freshGame = new Chess(fenRef.current);
+    const movingPiece = freshGame.get(from);
+    const targetPiece = freshGame.get(to);
+    const pieceStr = movingPiece
+      ? movingPiece.color === "w"
+        ? movingPiece.type.toUpperCase()
+        : movingPiece.type
+      : "";
+    
+    // Check if it's a capture
+    const isCapture = !!targetPiece;
+    
+    // Check for castling
+    const isCastling = movingPiece?.type === "k" && 
+      Math.abs(from.charCodeAt(0) - to.charCodeAt(0)) === 2;
+
+    animateMove(from, to, pieceStr, isCapture, () => {
+      const move = freshGame.move({ from, to, promotion: promotion || "q" });
+      if (move) {
+        const newFen = freshGame.fen();
+        setLastMove({ from, to });
+        setSelected(null);
+        setLegalSquaresArray([]);
+        setFen(newFen);
+        if (onMove) onMove({ from, to, san: move.san });
+        
+        // Play appropriate sound
+        if (freshGame.inCheck()) {
+          playSound("check");
+        } else if (isCastling) {
+          playSound("castle");
+        } else if (isCapture) {
+          playSound("capture");
+        } else {
+          playSound("move");
+        }
+        
+        // Only trigger AI if in AI mode and it's black's turn
+        if (gameMode === "ai" && !freshGame.isGameOver()) {
+          triggerAiMove(newFen);
+        }
+      }
+    });
+  }
+
+  function handlePromotionSelect(piece: PromotionPiece) {
+    if (!pendingPromotion) return;
+    
+    executeMove(pendingPromotion.from, pendingPromotion.to, piece);
+    setPendingPromotion(null);
+  }
+
+  function handlePromotionCancel() {
+    setPendingPromotion(null);
+    setSelected(null);
+    setLegalSquaresArray([]);
   }
 
   async function triggerAiMove(currentFen: string) {
     const currentGame = new Chess(currentFen);
     if (currentGame.isGameOver()) return;
+    
+    // Create abort controller for this request
+    const controller = new AbortController();
+    if (abortControllerRef) {
+      // Abort any previous request
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      abortControllerRef.current = controller;
+    }
+    
+    // Set timeout for the request (30 seconds)
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
+    
     setIsThinking(true);
+    if (onThinkingChange) onThinkingChange(true);
     try {
       const r = await fetch("/api/ai-move", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ fen: currentFen, elo }),
+        signal: controller.signal,
       });
+      
+      // Check if request was aborted or component unmounted
+      if (controller.signal.aborted) return;
+      
       const data = await r.json();
       if (data?.move && data?.fen) {
         // Parse the AI move to animate it
@@ -238,24 +349,54 @@ export default function Board({
         console.error("AI response malformed", data);
       }
     } catch (err) {
-      console.error(err);
+      // Only log error if not aborted
+      if (err instanceof Error && err.name !== "AbortError") {
+        console.error("AI move error:", err);
+      }
     } finally {
-      setIsThinking(false);
+      clearTimeout(timeoutId);
+      // Only update state if this controller is still the active one
+      if (!abortControllerRef || abortControllerRef.current === controller) {
+        setIsThinking(false);
+        if (onThinkingChange) onThinkingChange(false);
+      }
     }
   }
 
+  // Pre-compute file/rank to square mapping for better performance
+  const SQUARES: ChessSquare[] = useMemo(() => {
+    const squares: ChessSquare[] = [];
+    if (isFlipped) {
+      // When flipped, iterate from white's perspective reversed
+      for (let rank = 1; rank <= 8; rank++) {
+        for (let file = 7; file >= 0; file--) {
+          squares.push(("abcdefgh".charAt(file) + rank) as ChessSquare);
+        }
+      }
+    } else {
+      // Normal orientation
+      for (let rank = 8; rank >= 1; rank--) {
+        for (let file = 0; file < 8; file++) {
+          squares.push(("abcdefgh".charAt(file) + rank) as ChessSquare);
+        }
+      }
+    }
+    return squares;
+  }, [isFlipped]);
+
   const board = useMemo(() => {
     const rows = game.board();
-    return rows.flat().map((p, idx) => ({
-      piece: p ? p.type : null,
-      color: p ? p.color : null,
-      square: (() => {
-        const file = idx % 8;
-        const rank = 8 - Math.floor(idx / 8);
-        return ("abcdefgh".charAt(file) + rank) as ChessSquare;
-      })(),
-    }));
-  }, [game]);
+    return SQUARES.map((square, idx) => {
+      const rank = 8 - Math.floor(idx / 8);
+      const file = idx % 8;
+      const p = rows[8 - rank][file];
+      return {
+        piece: p ? p.type : null,
+        color: p ? p.color : null,
+        square,
+      };
+    });
+  }, [game, SQUARES]);
 
   // Calculate animation offset
   const getAnimationStyle = (square: ChessSquare) => {
@@ -321,7 +462,7 @@ export default function Board({
                 square={s.square}
                 piece={displayPiece}
                 isSelected={selected === s.square}
-                isLegalTarget={legalSquares.includes(s.square)}
+                isLegalTarget={legalSquares.has(s.square)}
                 isLastMove={
                   lastMove !== null &&
                   (lastMove.from === s.square || lastMove.to === s.square)
@@ -347,7 +488,7 @@ export default function Board({
 
       {/* File labels */}
       <div className="flex justify-around mt-1 px-1" style={{ width: "min(calc(100vw - 2rem), 70vh, 560px)" }}>
-        {["a", "b", "c", "d", "e", "f", "g", "h"].map((f) => (
+        {(isFlipped ? ["h", "g", "f", "e", "d", "c", "b", "a"] : ["a", "b", "c", "d", "e", "f", "g", "h"]).map((f) => (
           <span key={f} className="text-xs font-medium text-gray-400 uppercase">
             {f}
           </span>
@@ -359,7 +500,7 @@ export default function Board({
         className="absolute left-0 top-0 flex flex-col justify-around h-full py-1 -ml-4"
         style={{ height: "min(calc(100vw - 2rem), 70vh, 560px)" }}
       >
-        {[8, 7, 6, 5, 4, 3, 2, 1].map((r) => (
+        {(isFlipped ? [1, 2, 3, 4, 5, 6, 7, 8] : [8, 7, 6, 5, 4, 3, 2, 1]).map((r) => (
           <span key={r} className="text-xs font-medium text-gray-400">
             {r}
           </span>
@@ -384,6 +525,15 @@ export default function Board({
             <span className="text-white text-sm font-medium">AI thinking</span>
           </div>
         </div>
+      )}
+
+      {/* Pawn Promotion Dialog */}
+      {pendingPromotion && (
+        <PromotionDialog
+          color={pendingPromotion.color}
+          onSelect={handlePromotionSelect}
+          onCancel={handlePromotionCancel}
+        />
       )}
     </div>
   );

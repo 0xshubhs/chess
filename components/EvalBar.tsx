@@ -86,7 +86,8 @@ export default function EvalBar({ evaluation, mateIn, depth, nps }: Props) {
               : "bg-gray-800 text-white border border-gray-700"
           }`}
           style={{
-            top: `${Math.max(10, Math.min(90, 100 - whitePercentage))}%`,
+            // Clamp tooltip position between 5% and 95% to prevent overflow
+            top: `clamp(5%, ${100 - whitePercentage}%, 95%)`,
             transform: "translateY(-50%)",
           }}
         >

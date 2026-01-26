@@ -3,103 +3,143 @@
 import { useRef, useEffect, useCallback } from "react";
 
 // Sound types for chess moves
-const SOUND_TYPES = ["move", "capture", "check", "castle", "promote", "gameEnd"] as const;
+type SoundType = "move" | "capture" | "check" | "castle" | "promote" | "gameEnd";
 
-type SoundType = (typeof SOUND_TYPES)[number];
+// Shared audio context - lazy initialized, never recreated
+let sharedAudioContext: AudioContext | null = null;
+let contextInitAttempted = false;
 
-// Fallback: Generate sounds using Web Audio API
-function createSoundEffect(type: SoundType): () => void {
-  return () => {
-    if (typeof window === "undefined") return;
-    
+function getAudioContext(): AudioContext | null {
+  if (typeof window === "undefined") return null;
+  
+  // Only attempt to create once to avoid Safari limits
+  if (!sharedAudioContext && !contextInitAttempted) {
+    contextInitAttempted = true;
     try {
-      const audioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
-      const oscillator = audioContext.createOscillator();
-      const gainNode = audioContext.createGain();
-      
-      oscillator.connect(gainNode);
-      gainNode.connect(audioContext.destination);
-      
-      switch (type) {
-        case "move":
-          oscillator.frequency.value = 220;
-          oscillator.type = "sine";
-          gainNode.gain.setValueAtTime(0.08, audioContext.currentTime);
-          gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.08);
-          oscillator.start(audioContext.currentTime);
-          oscillator.stop(audioContext.currentTime + 0.08);
-          break;
-          
-        case "capture":
-          oscillator.frequency.value = 180;
-          oscillator.type = "triangle";
-          gainNode.gain.setValueAtTime(0.12, audioContext.currentTime);
-          gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.12);
-          oscillator.start(audioContext.currentTime);
-          oscillator.stop(audioContext.currentTime + 0.12);
-          break;
-          
-        case "check":
-          oscillator.frequency.value = 440;
-          oscillator.type = "sine";
-          gainNode.gain.setValueAtTime(0.06, audioContext.currentTime);
-          gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.15);
-          oscillator.start(audioContext.currentTime);
-          oscillator.stop(audioContext.currentTime + 0.15);
-          break;
-          
-        case "castle":
-          oscillator.frequency.value = 200;
-          oscillator.type = "sine";
-          gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
-          gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.15);
-          oscillator.start(audioContext.currentTime);
-          oscillator.stop(audioContext.currentTime + 0.15);
-          break;
-          
-        case "gameEnd":
-          oscillator.frequency.value = 330;
-          oscillator.type = "sine";
-          gainNode.gain.setValueAtTime(0.08, audioContext.currentTime);
-          gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.3);
-          oscillator.start(audioContext.currentTime);
-          oscillator.stop(audioContext.currentTime + 0.3);
-          break;
-          
-        default:
-          oscillator.frequency.value = 220;
-          oscillator.type = "sine";
-          gainNode.gain.setValueAtTime(0.05, audioContext.currentTime);
-          gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.1);
-          oscillator.start(audioContext.currentTime);
-          oscillator.stop(audioContext.currentTime + 0.1);
+      const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      if (AudioContextClass) {
+        sharedAudioContext = new AudioContextClass();
       }
     } catch {
-      // Audio not supported, fail silently
+      console.warn("AudioContext not supported");
+      return null;
     }
-  };
+  }
+  
+  if (!sharedAudioContext) return null;
+  
+  // Resume if suspended (browser autoplay policy)
+  if (sharedAudioContext.state === "suspended") {
+    sharedAudioContext.resume().catch(() => {
+      // Ignore resume errors - user hasn't interacted yet
+    });
+  }
+  
+  return sharedAudioContext;
 }
 
-export function useSoundEffects(enabled: boolean = true, volume: number = 0.3) {
-  const fallbackSounds = useRef<Map<SoundType, () => void>>(new Map());
+// Sound generator using Web Audio API
+function playSoundEffect(type: SoundType): void {
+  const audioContext = getAudioContext();
+  if (!audioContext) return;
+  
+  try {
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+    
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+    
+    const now = audioContext.currentTime;
+    
+    switch (type) {
+      case "move":
+        oscillator.frequency.value = 220;
+        oscillator.type = "sine";
+        gainNode.gain.setValueAtTime(0.08, now);
+        gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+        oscillator.start(now);
+        oscillator.stop(now + 0.08);
+        break;
+        
+      case "capture":
+        oscillator.frequency.value = 180;
+        oscillator.type = "triangle";
+        gainNode.gain.setValueAtTime(0.12, now);
+        gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+        oscillator.start(now);
+        oscillator.stop(now + 0.12);
+        break;
+        
+      case "check":
+        oscillator.frequency.value = 440;
+        oscillator.type = "sine";
+        gainNode.gain.setValueAtTime(0.06, now);
+        gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+        oscillator.start(now);
+        oscillator.stop(now + 0.15);
+        break;
+        
+      case "castle":
+        oscillator.frequency.value = 200;
+        oscillator.type = "sine";
+        gainNode.gain.setValueAtTime(0.1, now);
+        gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+        oscillator.start(now);
+        oscillator.stop(now + 0.15);
+        break;
+        
+      case "gameEnd":
+        oscillator.frequency.value = 330;
+        oscillator.type = "sine";
+        gainNode.gain.setValueAtTime(0.08, now);
+        gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+        oscillator.start(now);
+        oscillator.stop(now + 0.3);
+        break;
+        
+      default:
+        oscillator.frequency.value = 220;
+        oscillator.type = "sine";
+        gainNode.gain.setValueAtTime(0.05, now);
+        gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+        oscillator.start(now);
+        oscillator.stop(now + 0.1);
+    }
+  } catch {
+    // Audio not supported, fail silently
+  }
+}
 
-  // Initialize sound generators
+export function useSoundEffects(enabled = true) {
+  // Track if we've initialized audio (for user gesture requirement)
+  const initializedRef = useRef(false);
+
+  // Initialize audio context on first user interaction
   useEffect(() => {
     if (typeof window === "undefined" || !enabled) return;
-
-    // Create Web Audio API sounds
-    SOUND_TYPES.forEach((type) => {
-      fallbackSounds.current.set(type, createSoundEffect(type));
-    });
+    
+    const initAudio = () => {
+      if (!initializedRef.current) {
+        getAudioContext();
+        initializedRef.current = true;
+      }
+    };
+    
+    // Initialize on first user interaction
+    window.addEventListener("click", initAudio, { once: true });
+    window.addEventListener("keydown", initAudio, { once: true });
+    
+    return () => {
+      window.removeEventListener("click", initAudio);
+      window.removeEventListener("keydown", initAudio);
+    };
   }, [enabled]);
 
   const playSound = useCallback(
     (type: SoundType) => {
       if (!enabled) return;
-
-      // Use Web Audio API sounds
-      const sound = fallbackSounds.current.get(type);
-      if (sound) sound();
+      playSoundEffect(type);
     },
     [enabled]
   );
