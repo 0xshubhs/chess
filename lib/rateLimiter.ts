@@ -121,7 +121,7 @@ class InMemoryStorage implements RateLimitStorage {
  * Requires REDIS_URL environment variable.
  */
 class RedisStorage implements RateLimitStorage {
-  private client: ReturnType<typeof import('redis').createClient> | null = null;
+  private client: ReturnType<typeof import('@redis/client').createClient> | null = null;
   private connected = false;
   private connectionAttempts = 0;
   private lastFailure = 0;
@@ -146,8 +146,8 @@ class RedisStorage implements RateLimitStorage {
     this.connectionAttempts++;
 
     try {
-      // Dynamic import to avoid build issues when redis isn't installed
-      const { createClient } = await import('redis');
+      // Use @redis/client directly - cleaner than full redis package
+      const { createClient } = await import('@redis/client');
       this.client = createClient({ 
         url: redisUrl,
         socket: {
