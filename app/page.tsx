@@ -10,7 +10,7 @@
 
 import React, { useEffect, useCallback } from "react";
 import { useShallow } from "zustand/react/shallow";
-import Board from "../components/Board-v2";
+import Board from "../components/Board";
 import PlayerPanel from "../components/PlayerPanel";
 import MoveList from "../components/MoveList";
 import EvalBar from "../components/EvalBar";

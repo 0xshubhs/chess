@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { TIME_CONTROLS, TIME_CONTROL_LABELS, GameMode } from "../hooks/useChessGame";
+import { TIME_CONTROLS, TIME_CONTROL_LABELS, GameMode } from "../lib/store";
 
 interface TimeControlSelectorProps {
   selectedTime: string;

@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { GameResult } from "../hooks/useChessGame";
+import { GameResult } from "../lib/store";
 
 interface GameOverModalProps {
   result: GameResult;
