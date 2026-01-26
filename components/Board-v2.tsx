@@ -440,8 +440,8 @@ function Board() {
           isGameOver ? "opacity-75" : ""
         } ${isAiThinking ? "cursor-wait" : ""}`}
         style={{
-          width: "min(calc(100vw - 2rem), 70vh, 560px)",
-          height: "min(calc(100vw - 2rem), 70vh, 560px)",
+          width: "min(calc(100vw - 2rem), calc(100vh - 2rem), 700px)",
+          height: "min(calc(100vw - 2rem), calc(100vh - 2rem), 700px)",
           border: "6px solid #4b3621",
           borderRadius: "4px",
           boxShadow: "0 8px 32px rgba(0,0,0,0.4)",

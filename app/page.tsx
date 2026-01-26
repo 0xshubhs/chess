@@ -248,21 +248,9 @@ export default function Page() {
   // ============================================================================
   
   return (
-    <div className="game-container flex flex-col lg:flex-row items-start justify-center gap-4 lg:gap-6 p-2 lg:p-4">
-      {/* Left side panel */}
-      <div className="side-panel w-full lg:w-64 order-2 lg:order-1 flex flex-col gap-3">
-        <PlayerPanel {...topPlayer} isUnlimitedTime={isUnlimited} />
-
-        {/* Desktop move list */}
-        <div className="hidden lg:block">
-          <MoveList moves={moves} statusMsg={statusMsg} />
-        </div>
-
-        <PlayerPanel {...bottomPlayer} isUnlimitedTime={isUnlimited} />
-      </div>
-
-      {/* Board with Eval Bar */}
-      <div className="board-wrapper order-1 lg:order-2 flex items-start gap-2">
+    <div className="game-container flex flex-col lg:flex-row items-start justify-start gap-4 lg:gap-6 p-2 lg:p-4 lg:pl-8 min-h-screen">
+      {/* Board with Eval Bar - First on desktop for left alignment */}
+      <div className="board-wrapper order-1 flex items-start gap-2 flex-shrink-0">
         {gameMode === "ai" && (
           <div className="hidden sm:block">
             <EvalBar evaluation={evaluation} depth={evalDepth ?? undefined} />
@@ -272,8 +260,22 @@ export default function Page() {
         <Board />
       </div>
 
-      {/* Right side panel */}
-      <div className="side-panel w-full lg:w-64 order-3 flex flex-col gap-3">
+      {/* Side panels container */}
+      <div className="side-panels flex flex-col lg:flex-row gap-4 lg:gap-6 order-2 w-full lg:w-auto lg:flex-1">
+        {/* Left side panel - player info */}
+        <div className="side-panel w-full lg:w-64 flex flex-col gap-3">
+          <PlayerPanel {...topPlayer} isUnlimitedTime={isUnlimited} />
+
+        {/* Desktop move list */}
+        <div className="hidden lg:block">
+          <MoveList moves={moves} statusMsg={statusMsg} />
+        </div>
+
+        <PlayerPanel {...bottomPlayer} isUnlimitedTime={isUnlimited} />
+        </div>
+
+        {/* Right side panel - controls */}
+        <div className="side-panel w-full lg:w-64 flex flex-col gap-3">
         {/* Time Control Selector */}
         <TimeControlSelector
           gameMode={gameMode}
@@ -332,6 +334,7 @@ export default function Page() {
               <span className="bg-gray-600 px-1.5 py-0.5 rounded text-xs">{moves.length}</span>
             )}
           </button>
+        </div>
         </div>
       </div>
 
