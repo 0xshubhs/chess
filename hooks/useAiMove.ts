@@ -20,7 +20,7 @@ export function useAiMove() {
   const abortControllerRef = useRef<AbortController | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
 
-  const { setAiThinking, updateEvaluation, setFen, makeMove } = useGameStore();
+  const { setAiThinking, updateEvaluation } = useGameStore();
 
   /**
    * Request an AI move via SSE streaming
@@ -161,6 +161,7 @@ export function useAiMove() {
         abortControllerRef.current = null;
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [setAiThinking, updateEvaluation]
   );
 

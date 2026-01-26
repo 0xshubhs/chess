@@ -121,7 +121,7 @@ class InMemoryStorage implements RateLimitStorage {
  * Requires REDIS_URL environment variable.
  */
 class RedisStorage implements RateLimitStorage {
-  private client: any = null;
+  private client: ReturnType<typeof import('redis').createClient> | null = null;
   private connected = false;
   private connectionAttempts = 0;
   private lastFailure = 0;
@@ -181,7 +181,7 @@ class RedisStorage implements RateLimitStorage {
   }
 
   isHealthy(): boolean {
-    return this.connected && this.client?.isReady;
+    return this.connected && (this.client?.isReady ?? false);
   }
 
   async get(key: string): Promise<RateLimitRecord | null> {

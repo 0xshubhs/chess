@@ -55,7 +55,7 @@ export const easings = {
 };
 
 // Pre-computed easing lookup for hot path
-const EASING_FNS: Record<string, (t: number) => number> = easings;
+const _EASING_FNS: Record<string, (t: number) => number> = easings;
 
 /**
  * Convert square notation to pixel coordinates

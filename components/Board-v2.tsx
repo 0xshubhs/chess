@@ -126,8 +126,8 @@ function Board() {
     const engine = getEngine();
     engine.load(fen);
     
-    const movingPiece = engine.get(from as any);
-    const targetPiece = engine.get(to as any);
+    const movingPiece = engine.get(from);
+    const targetPiece = engine.get(to);
     const isCapture = !!targetPiece;
     const isCastling = movingPiece?.type === "k" && Math.abs(from.charCodeAt(0) - to.charCodeAt(0)) === 2;
     
@@ -248,8 +248,8 @@ function Board() {
               const engine = getEngine();
               engine.load(currentFen);
               
-              const movingPiece = engine.get(data.from as any);
-              const targetPiece = engine.get(data.to as any);
+              const movingPiece = engine.get(data.from as ChessSquare);
+              const targetPiece = engine.get(data.to as ChessSquare);
               const isCapture = !!targetPiece;
               const isCastling = movingPiece?.type === "k" && 
                 Math.abs(data.from.charCodeAt(0) - data.to.charCodeAt(0)) === 2;
@@ -344,12 +344,12 @@ function Board() {
 
     const engine = getEngine();
     engine.load(fen);
-    const piece = engine.get(square as any);
+    const piece = engine.get(square);
 
     if (selectedSquare) {
       // Check if it's a legal move
       if (legalMovesSet.has(square)) {
-        const movingPiece = engine.get(selectedSquare as any);
+        const movingPiece = engine.get(selectedSquare as ChessSquare);
         
         // Check for pawn promotion
         const isPromotion = movingPiece?.type === "p" && 

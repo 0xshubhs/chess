@@ -15,6 +15,9 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Chess — Ollama AI",
   description: "Play chess against an Ollama-powered AI",
+  icons: {
+    icon: "/image.png",
+  },
 };
 
 export default function RootLayout({

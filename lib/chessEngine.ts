@@ -151,7 +151,11 @@ export class ChessEngine {
    */
   moves(options?: { square?: Square; verbose?: boolean }): Move[] | string[] {
     if (!options?.verbose) {
-      return this.chess.moves(options as any) as string[];
+      // When verbose is false/undefined, chess.js returns string[]
+      if (options?.square) {
+        return this.chess.moves({ square: options.square }) as unknown as string[];
+      }
+      return this.chess.moves() as unknown as string[];
     }
 
     const square = options.square;
@@ -231,7 +235,7 @@ export class ChessEngine {
    * Get move history
    */
   history(options?: { verbose: boolean }): Move[] | string[] {
-    return this.chess.history(options as any);
+    return this.chess.history(options as Parameters<Chess['history']>[0]);
   }
 
   /**
@@ -410,8 +414,9 @@ export class EvaluationEngine {
 
     const board = chess.board();
     let score = 0;
-    let whitePawns = 0;
-    let blackPawns = 0;
+    // Pawn counters for future use in pawn structure evaluation
+    // let whitePawns = 0;
+    // let blackPawns = 0;
 
     for (let r = 0; r < 8; r++) {
       for (let f = 0; f < 8; f++) {
@@ -434,8 +439,7 @@ export class EvaluationEngine {
 
         // Pawn structure
         if (piece.type === 'p') {
-          if (piece.color === 'w') whitePawns++;
-          else blackPawns++;
+          // Pawn counting removed - was unused
           
           // Advancement bonus
           const advancement = piece.color === 'w' 

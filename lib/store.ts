@@ -12,7 +12,7 @@
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
 import { immer } from 'zustand/middleware/immer';
-import { Color, Move } from 'chess.js';
+import { Color, Move, Square } from 'chess.js';
 import { ChessEngine } from './chessEngine';
 
 // ============================================================================
@@ -353,9 +353,9 @@ export const useGameStore = create<GameState & GameActions>()(
           return;
         }
 
-        const piece = engine.get(square as any);
+        const piece = engine.get(square as Square);
         if (piece && piece.color === engine.turn()) {
-          const moves = engine.moves({ square: square as any, verbose: true }) as Move[];
+          const moves = engine.moves({ square: square as Square, verbose: true }) as Move[];
           set((state) => {
             state.selectedSquare = square;
             state.legalMoves = moves.map((m) => m.to);

@@ -6,7 +6,7 @@
  */
 
 import { NextRequest } from 'next/server';
-import { Chess } from 'chess.js';
+import { Chess, Move } from 'chess.js';
 import { mapEloToTemperature, pickMoveByProbability } from '../../../utils/elo';
 import { RateLimiter } from '../../../lib/rateLimiter';
 import { EvaluationEngine } from '../../../lib/chessEngine';
@@ -202,7 +202,7 @@ function evaluateMoves(
   fen: string,
   legal: ReturnType<Chess['moves']>
 ): EvaluatedMove[] {
-  return (legal as any[]).map((m) => {
+  return (legal as Move[]).map((m) => {
     const result = EvaluationEngine.evaluateMove(fen, {
       from: m.from,
       to: m.to,
