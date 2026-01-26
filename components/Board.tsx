@@ -433,15 +433,38 @@ function Board() {
   // Render
   // ============================================================================
   
+  // Single source of truth for sizing
+  const BOARD_SIZE = "min(calc(100vw - 2rem), calc(100vh - 2rem), 700px)";
+  const GUTTER = "20px"; // space for coordinates
+
   return (
-    <div className="board-container relative">
+    <div
+      className="board-container relative grid"
+      style={{
+        gridTemplateColumns: `${GUTTER} 1fr`,
+        gridTemplateRows: `1fr ${GUTTER}`,
+        width: `calc(${BOARD_SIZE} + ${GUTTER})`,
+        height: `calc(${BOARD_SIZE} + ${GUTTER})`,
+      }}
+    >
+      {/* Rank labels (1-8) - left column */}
+      <div className="grid grid-rows-8">
+        {(isFlipped ? [1, 2, 3, 4, 5, 6, 7, 8] : [8, 7, 6, 5, 4, 3, 2, 1]).map((r) => (
+          <span
+            key={r}
+            className="flex items-center justify-center text-xs font-semibold text-gray-400"
+          >
+            {r}
+          </span>
+        ))}
+      </div>
+
+      {/* Board - top-right cell */}
       <div
-        className={`board grid grid-cols-8 gap-0 overflow-hidden transition-opacity duration-300 ${
+        className={`board grid grid-cols-8 overflow-hidden transition-opacity duration-300 ${
           isGameOver ? "opacity-75" : ""
         } ${isAiThinking ? "cursor-wait" : ""}`}
         style={{
-          width: "min(calc(100vw - 2rem), calc(100vh - 2rem), 700px)",
-          height: "min(calc(100vw - 2rem), calc(100vh - 2rem), 700px)",
           border: "6px solid #4b3621",
           borderRadius: "4px",
           boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
@@ -495,29 +518,17 @@ function Board() {
         })}
       </div>
 
-      {/* File labels (a-h) */}
-      <div 
-        className="grid grid-cols-8" 
-        style={{ 
-          width: "min(calc(100vw - 2rem), 70vh, 560px)",
-          marginTop: "4px",
-        }}
-      >
-        {(isFlipped ? ["h", "g", "f", "e", "d", "c", "b", "a"] : ["a", "b", "c", "d", "e", "f", "g", "h"]).map((f) => (
-          <span key={f} className="text-xs font-semibold text-gray-400 text-center">
-            {f}
-          </span>
-        ))}
-      </div>
+      {/* Empty corner cell (bottom-left) */}
+      <div />
 
-      {/* Rank labels (1-8) */}
-      <div
-        className="absolute left-0 top-0 grid grid-rows-8 -ml-4"
-        style={{ height: "min(calc(100vw - 2rem), 70vh, 560px)" }}
-      >
-        {(isFlipped ? [1, 2, 3, 4, 5, 6, 7, 8] : [8, 7, 6, 5, 4, 3, 2, 1]).map((r) => (
-          <span key={r} className="text-xs font-semibold text-gray-400 flex items-center justify-center">
-            {r}
+      {/* File labels (a-h) - bottom row */}
+      <div className="grid grid-cols-8">
+        {(isFlipped ? ["h", "g", "f", "e", "d", "c", "b", "a"] : ["a", "b", "c", "d", "e", "f", "g", "h"]).map((f) => (
+          <span
+            key={f}
+            className="flex items-center justify-center text-xs font-semibold text-gray-400"
+          >
+            {f}
           </span>
         ))}
       </div>
