@@ -1,42 +1,33 @@
 import { NextResponse } from "next/server";
 import { Chess } from "chess.js";
 import { mapEloToTemperature, pickMoveByProbability } from "../../../utils/elo";
+import { EvaluationEngine } from "../../../lib/chessEngine";
 
 const OLLAMA_URL = process.env.OLLAMA_URL || "http://localhost:11434";
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "llama3.2:latest";
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const REQUEST_TIMEOUT = 25000; // 25 seconds timeout
 
-// Simple in-memory rate limiting (use Redis in production)
-const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
-const RATE_LIMIT = 30; // requests per minute
-const RATE_WINDOW = 60000; // 1 minute
-
-function checkRateLimit(ip: string): boolean {
-  const now = Date.now();
-  const record = rateLimitMap.get(ip);
-  
-  if (!record || now > record.resetTime) {
-    rateLimitMap.set(ip, { count: 1, resetTime: now + RATE_WINDOW });
-    return true;
-  }
-  
-  if (record.count >= RATE_LIMIT) {
-    return false;
-  }
-  
-  record.count++;
-  return true;
-}
+// Use Redis-compatible rate limiter (falls back to memory)
+import { RateLimiter } from "../../../lib/rateLimiter";
+const rateLimiter = RateLimiter.getInstance();
 
 // FEN validation regex - basic structure check
 const FEN_REGEX = /^([rnbqkpRNBQKP1-8]+\/){7}[rnbqkpRNBQKP1-8]+ [wb] [KQkq-]+ [a-h1-8-]+ \d+ \d+$/;
 
 export async function POST(req: Request) {
-  // Rate limiting
+  // Rate limiting (now uses Redis in production)
   const ip = req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip") || "unknown";
-  if (!checkRateLimit(ip)) {
-    return NextResponse.json({ error: "rate_limited" }, { status: 429 });
+  const rateLimitResult = await rateLimiter.checkLimit(ip);
+  
+  if (!rateLimitResult.allowed) {
+    return NextResponse.json(
+      { error: "rate_limited", retryAfter: rateLimitResult.retryAfter },
+      { 
+        status: 429,
+        headers: { "Retry-After": String(rateLimitResult.retryAfter) }
+      }
+    );
   }
   
   let body;
@@ -73,11 +64,15 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "no_legal_moves" }, { status: 400 });
   }
 
-  // Evaluate each legal move locally (material + position + captures)
+  // Evaluate each legal move using pooled engine (no more new Chess() per move!)
   const evaluated = legal.map((m) => {
-    const g = new Chess(fen);
-    g.move({ from: m.from, to: m.to, promotion: m.promotion ?? "q" });
-    let score = simpleEval(g);
+    const result = EvaluationEngine.evaluateMove(fen, {
+      from: m.from,
+      to: m.to,
+      promotion: m.promotion ?? "q",
+    });
+    
+    let score = result.score;
     
     // Boost score for captures (the bigger the captured piece, the bigger the boost)
     if (m.captured) {
@@ -92,12 +87,12 @@ export async function POST(req: Request) {
     }
     
     // Bonus for checks
-    if (g.inCheck()) {
+    if (result.isCheck) {
       score += 0.8;
     }
     
     // Bonus for checkmate
-    if (g.isCheckmate()) {
+    if (result.isCheckmate) {
       score += 100;
     }
     

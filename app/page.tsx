@@ -1,77 +1,94 @@
 "use client";
 
-import React, { useState, useMemo, useCallback, useRef } from "react";
-import Board from "../components/Board";
+/**
+ * Main Chess Page - PRODUCTION VERSION
+ * 
+ * Uses Zustand store for ALL state management.
+ * No useState calls. No redundant Chess instances.
+ * Proper separation of concerns.
+ */
+
+import React, { useEffect, useCallback } from "react";
+import Board from "../components/Board-v2";
 import PlayerPanel from "../components/PlayerPanel";
 import MoveList from "../components/MoveList";
 import EvalBar from "../components/EvalBar";
 import TimeControlSelector from "../components/TimeControlSelector";
 import GameActions from "../components/GameActions";
 import GameOverModal from "../components/GameOverModal";
-import { useChessClock } from "../hooks/useChessClock";
-import { Chess, Color } from "chess.js";
-import { TIME_CONTROLS, GameMode, GameResult } from "../hooks/useChessGame";
-
-const INITIAL_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+import {
+  useGameStore,
+  selectGameStatus,
+  selectTimeState,
+  selectGameSettings,
+} from "../lib/store";
+import { useClockAnimation, formatTime } from "../lib/animations";
 
 export default function Page() {
-  // Core game state
-  const [fen, setFenState] = useState<string>(INITIAL_FEN);
-  const [turn, setTurn] = useState<Color>("w");
-  const [statusMsg, setStatusMsg] = useState<string>("");
-  const [moves, setMoves] = useState<string[]>([]);
-  const [isAiThinking, setIsAiThinking] = useState(false);
-  const [evaluation, setEvaluation] = useState(0);
-  const [evalDepth, setEvalDepth] = useState<number | undefined>();
-  const [gameMode, setGameModeState] = useState<GameMode>("pvp"); // Default to 2-player
-  const [elo, setElo] = useState<number>(1200);
+  // ============================================================================
+  // Zustand selectors - surgical state subscriptions for minimal re-renders
+  // ============================================================================
   
-  // Time control state
-  const [timeControl, setTimeControlState] = useState("blitz5");
-  const [whiteTime, setWhiteTime] = useState(TIME_CONTROLS.blitz5.initial);
-  const [blackTime, setBlackTime] = useState(TIME_CONTROLS.blitz5.initial);
+  const { isGameOver, gameResult, statusMsg } = useGameStore(selectGameStatus);
+  const { whiteTime, blackTime, turn, isUnlimited } = useGameStore(selectTimeState);
+  const { gameMode, timeControl, elo } = useGameStore(selectGameSettings);
   
-  // Game result state
-  const [gameResult, setGameResult] = useState<GameResult>({ winner: null, reason: null });
-  const [showGameOverModal, setShowGameOverModal] = useState(false);
+  // Individual state pieces that change frequently
+  const moves = useGameStore((s) => s.moves);
+  const isFlipped = useGameStore((s) => s.isFlipped);
+  const isAiThinking = useGameStore((s) => s.isAiThinking);
+  const evaluation = useGameStore((s) => s.evaluation);
+  const evalDepth = useGameStore((s) => s.evalDepth);
+  const moveDrawerOpen = useGameStore((s) => s.moveDrawerOpen);
+  const showGameOverModal = useGameStore((s) => s.showGameOverModal);
+  const fen = useGameStore((s) => s.fen);
+
+  // Actions (stable references, no re-renders)
+  const newGame = useGameStore((s) => s.newGame);
+  const undoMove = useGameStore((s) => s.undoMove);
+  const flipBoard = useGameStore((s) => s.flipBoard);
+  const resign = useGameStore((s) => s.resign);
+  const offerDraw = useGameStore((s) => s.offerDraw);
+  const setGameMode = useGameStore((s) => s.setGameMode);
+  const setTimeControl = useGameStore((s) => s.setTimeControl);
+  const setElo = useGameStore((s) => s.setElo);
+  const setMoveDrawerOpen = useGameStore((s) => s.setMoveDrawerOpen);
+  const setShowGameOverModal = useGameStore((s) => s.setShowGameOverModal);
+  const tickClock = useGameStore((s) => s.tickClock);
+
+  // ============================================================================
+  // Clock animation using requestAnimationFrame
+  // ============================================================================
   
-  // UI state
-  const [moveDrawerOpen, setMoveDrawerOpen] = useState(false);
-  const [isFlipped, setIsFlipped] = useState(false);
+  const clockAnimation = useClockAnimation();
   
-  // Refs
-  const abortControllerRef = useRef<AbortController | null>(null);
-  
-  // Derived state
-  const game = useMemo(() => new Chess(fen), [fen]);
-  const isGameOver = game.isGameOver() || gameResult.winner !== null;
-  const isUnlimited = timeControl === "unlimited";
-  
-  // Handle timeout callback
-  const handleTimeout = useCallback((color: Color) => {
-    setGameResult({
-      winner: color === "w" ? "black" : "white",
-      reason: "timeout",
+  useEffect(() => {
+    if (isGameOver || isAiThinking || moves.length === 0 || isUnlimited) {
+      clockAnimation.stop();
+      return;
+    }
+    
+    clockAnimation.start((deltaMs) => {
+      tickClock(deltaMs);
     });
-    setStatusMsg(color === "w" ? "White ran out of time" : "Black ran out of time");
-    setShowGameOverModal(true);
-  }, []);
+    
+    return () => clockAnimation.stop();
+  }, [isGameOver, isAiThinking, moves.length, isUnlimited, clockAnimation, tickClock]);
+
+  // ============================================================================
+  // Computed values
+  // ============================================================================
   
-  // Chess clock hook
-  const { whiteTimeFormatted, blackTimeFormatted, isWhiteLow, isBlackLow, isWhiteCritical, isBlackCritical } = useChessClock({
-    whiteTime,
-    blackTime,
-    setWhiteTime,
-    setBlackTime,
-    turn,
-    isGameOver,
-    onTimeout: handleTimeout,
-    isPaused: isAiThinking || moves.length === 0,
-    isUnlimited,
-  });
-  
-  // Calculate captured pieces
-  const { whiteCaptured, blackCaptured, whiteAdvantage, blackAdvantage } = useMemo(() => {
+  // Format times
+  const whiteTimeFormatted = formatTime(whiteTime);
+  const blackTimeFormatted = formatTime(blackTime);
+  const isWhiteLow = whiteTime > 0 && whiteTime <= 30;
+  const isBlackLow = blackTime > 0 && blackTime <= 30;
+  const isWhiteCritical = whiteTime > 0 && whiteTime <= 10;
+  const isBlackCritical = blackTime > 0 && blackTime <= 10;
+
+  // Calculate captured pieces from FEN (memoized calculation)
+  const { whiteCaptured, blackCaptured, whiteAdvantage, blackAdvantage } = React.useMemo(() => {
     const pieceValues: Record<string, number> = { p: 1, n: 3, b: 3, r: 5, q: 9 };
     const pieceGlyphs: Record<string, string> = {
       p: "♟", n: "♞", b: "♝", r: "♜", q: "♛",
@@ -81,12 +98,16 @@ export default function Page() {
     const initial = { p: 8, n: 2, b: 2, r: 2, q: 1 };
     const current = { w: { p: 0, n: 0, b: 0, r: 0, q: 0 }, b: { p: 0, n: 0, b: 0, r: 0, q: 0 } };
 
-    const board = game.board();
-    for (const row of board) {
-      for (const sq of row) {
-        if (sq && sq.type !== "k") {
-          current[sq.color][sq.type]++;
-        }
+    // Parse FEN to count pieces
+    const boardPart = fen.split(' ')[0];
+    for (const char of boardPart) {
+      if (char === '/') continue;
+      if (/\d/.test(char)) continue;
+      
+      const isWhite = char === char.toUpperCase();
+      const type = char.toLowerCase() as 'p' | 'n' | 'b' | 'r' | 'q' | 'k';
+      if (type !== 'k') {
+        current[isWhite ? 'w' : 'b'][type]++;
       }
     }
 
@@ -115,159 +136,63 @@ export default function Page() {
       whiteAdvantage: Math.max(0, whiteMaterial - blackMaterial),
       blackAdvantage: Math.max(0, blackMaterial - whiteMaterial),
     };
-  }, [game]);
+  }, [fen]);
 
-  // Set FEN - game over detection moved to useEffect to avoid duplicate Chess instances
-  const setFen = useCallback((newFen: string) => {
-    setFenState(newFen);
-  }, []);
+  // ============================================================================
+  // Event handlers
+  // ============================================================================
   
-  // Detect game over state from the memoized game instance (avoids creating duplicate Chess objects)
-  React.useEffect(() => {
-    if (game.isCheckmate()) {
-      setStatusMsg("Checkmate");
-      const winner = game.turn() === "w" ? "black" : "white";
-      setGameResult({ winner, reason: "checkmate" });
-      setShowGameOverModal(true);
-    } else if (game.isStalemate()) {
-      setStatusMsg("Stalemate");
-      setGameResult({ winner: "draw", reason: "stalemate" });
-      setShowGameOverModal(true);
-    } else if (game.isDraw()) {
-      setStatusMsg("Draw");
-      setGameResult({ winner: "draw", reason: "draw" });
-      setShowGameOverModal(true);
-    } else if (game.inCheck()) {
-      setStatusMsg("Check");
-    } else {
-      setStatusMsg("");
-    }
-  }, [fen, game]);
-
-  // Handle move from board - add increment after move
-  // IMPORTANT: By the time this is called, the turn has ALREADY switched in the game
-  // So we need to add increment to the OPPOSITE of current turn (the player who just moved)
-  const handleMove = useCallback((move: { from: string; to: string; san: string }) => {
-    setMoves((prev) => [...prev, move.san]);
-    
-    // Add increment after move - turn has switched, so opposite color just moved
-    const tc = TIME_CONTROLS[timeControl];
-    if (tc.increment > 0) {
-      // turn is NOW the next player, so the previous player (who just moved) is opposite
-      setWhiteTime(prev => turn === "b" ? prev + tc.increment : prev);
-      setBlackTime(prev => turn === "w" ? prev + tc.increment : prev);
-    }
-  }, [timeControl, turn]);
-
-  // New game
   const handleNewGame = useCallback(() => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
-    }
-    setFenState(INITIAL_FEN);
-    setMoves([]);
-    setEvaluation(0);
-    setEvalDepth(undefined);
-    setGameResult({ winner: null, reason: null });
-    setStatusMsg("");
-    setShowGameOverModal(false);
-    
-    // Reset timers
-    const tc = TIME_CONTROLS[timeControl];
-    setWhiteTime(tc.initial);
-    setBlackTime(tc.initial);
-  }, [timeControl]);
+    newGame();
+  }, [newGame]);
 
-  // Change game mode
-  const handleGameModeChange = useCallback((mode: GameMode) => {
+  const handleUndo = useCallback(() => {
+    undoMove();
+  }, [undoMove]);
+
+  const handleFlip = useCallback(() => {
+    flipBoard();
+  }, [flipBoard]);
+
+  const handleResign = useCallback(() => {
+    if (!window.confirm("Are you sure you want to resign?")) return;
+    resign(gameMode === "ai" ? "w" : turn);
+  }, [resign, gameMode, turn]);
+
+  const handleDraw = useCallback(() => {
+    if (gameMode === "pvp") {
+      if (!window.confirm("Offer a draw?")) return;
+      offerDraw();
+    }
+  }, [offerDraw, gameMode]);
+
+  const handleGameModeChange = useCallback((mode: "ai" | "pvp") => {
     if (moves.length > 0) {
       if (!window.confirm("Start a new game? Current progress will be lost.")) {
         return;
       }
     }
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
-    }
-    setGameModeState(mode);
-    handleNewGame();
-  }, [moves.length, handleNewGame]);
+    setGameMode(mode);
+  }, [setGameMode, moves.length]);
 
-  // Change time control
   const handleTimeControlChange = useCallback((tc: string) => {
     if (moves.length > 0) {
       if (!window.confirm("Start a new game? Current progress will be lost.")) {
         return;
       }
     }
-    setTimeControlState(tc);
-    const control = TIME_CONTROLS[tc];
-    setWhiteTime(control.initial);
-    setBlackTime(control.initial);
-    handleNewGame();
-  }, [moves.length, handleNewGame]);
+    setTimeControl(tc);
+    newGame();
+  }, [setTimeControl, newGame, moves.length]);
 
-  // Undo move
-  const handleUndo = useCallback(() => {
-    const g = new Chess(fen);
-    const firstUndo = g.undo();
-    if (!firstUndo) return;
-    
-    // In AI mode, undo both moves
-    if (gameMode === "ai") {
-      g.undo();
-    }
-    
-    setFen(g.fen());
-    setMoves(prev => {
-      const newMoves = [...prev];
-      newMoves.pop();
-      if (gameMode === "ai") newMoves.pop();
-      return newMoves;
-    });
-  }, [fen, gameMode, setFen]);
+  const handleEloChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setElo(Number(e.target.value));
+  }, [setElo]);
 
-  // Flip board
-  const handleFlip = useCallback(() => {
-    setIsFlipped(prev => !prev);
-  }, []);
-
-  // Resign
-  const handleResign = useCallback(() => {
-    if (!window.confirm("Are you sure you want to resign?")) return;
-    
-    const loser = gameMode === "ai" ? "w" : turn;
-    setGameResult({
-      winner: loser === "w" ? "black" : "white",
-      reason: "resignation",
-    });
-    setStatusMsg(loser === "w" ? "White resigned" : "Black resigned");
-    setShowGameOverModal(true);
-  }, [gameMode, turn]);
-
-  // Offer draw
-  const handleDraw = useCallback(() => {
-    if (gameMode === "pvp") {
-      if (!window.confirm("Offer a draw?")) return;
-      setGameResult({ winner: "draw", reason: "agreement" });
-      setStatusMsg("Draw by agreement");
-      setShowGameOverModal(true);
-    }
-  }, [gameMode]);
-
-  // Handle turn change from Board
-  const handleTurnChange = useCallback((newTurn: Color) => {
-    setTurn(newTurn);
-  }, []);
-
-  // Handle eval updates from engine
-  const handleEvalUpdate = useCallback((eval_: number, depth?: number) => {
-    setEvaluation(eval_);
-    if (depth !== undefined) setEvalDepth(depth);
-  }, []);
-
-  // Player panel props based on board orientation
+  // ============================================================================
+  // Player panel configuration
+  // ============================================================================
+  
   const topPlayer = isFlipped ? {
     name: gameMode === "ai" ? "You" : "Player 1 (White)",
     isAI: false,
@@ -316,6 +241,10 @@ export default function Page() {
     color: "white" as const,
   };
 
+  // ============================================================================
+  // Render
+  // ============================================================================
+  
   return (
     <div className="game-container flex flex-col lg:flex-row items-start justify-center gap-4 lg:gap-6 p-2 lg:p-4">
       {/* Left side panel */}
@@ -334,25 +263,11 @@ export default function Page() {
       <div className="board-wrapper order-1 lg:order-2 flex items-start gap-2">
         {gameMode === "ai" && (
           <div className="hidden sm:block">
-            <EvalBar evaluation={evaluation} depth={evalDepth} />
+            <EvalBar evaluation={evaluation} depth={evalDepth ?? undefined} />
           </div>
         )}
         
-        <Board
-          fen={fen}
-          setFen={setFen}
-          setStatusMsg={setStatusMsg}
-          elo={elo}
-          setTurn={handleTurnChange}
-          onMove={handleMove}
-          soundEnabled={true}
-          onEvalUpdate={handleEvalUpdate}
-          gameMode={gameMode}
-          onGameOver={() => {}}
-          onThinkingChange={setIsAiThinking}
-          abortControllerRef={abortControllerRef}
-          isFlipped={isFlipped}
-        />
+        <Board />
       </div>
 
       {/* Right side panel */}
@@ -383,7 +298,7 @@ export default function Page() {
                 max={2400}
                 step={100}
                 value={elo}
-                onChange={(e) => setElo(Number(e.target.value))}
+                onChange={handleEloChange}
                 className="flex-1 h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-green-500"
               />
               <span className="text-white font-bold text-sm w-12 text-right tabular-nums">{elo}</span>
@@ -404,7 +319,6 @@ export default function Page() {
           gameMode={gameMode}
         />
 
-        {/* Mobile move drawer toggle */}
         <div className="lg:hidden">
           <button
             onClick={() => setMoveDrawerOpen(!moveDrawerOpen)}
