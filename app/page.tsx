@@ -9,6 +9,7 @@
  */
 
 import React, { useEffect, useCallback } from "react";
+import { useShallow } from "zustand/react/shallow";
 import Board from "../components/Board-v2";
 import PlayerPanel from "../components/PlayerPanel";
 import MoveList from "../components/MoveList";
@@ -27,11 +28,12 @@ import { useClockAnimation, formatTime } from "../lib/animations";
 export default function Page() {
   // ============================================================================
   // Zustand selectors - surgical state subscriptions for minimal re-renders
+  // useShallow prevents infinite loops by doing shallow equality comparison
   // ============================================================================
   
-  const { isGameOver, gameResult, statusMsg } = useGameStore(selectGameStatus);
-  const { whiteTime, blackTime, turn, isUnlimited } = useGameStore(selectTimeState);
-  const { gameMode, timeControl, elo } = useGameStore(selectGameSettings);
+  const { isGameOver, gameResult, statusMsg } = useGameStore(useShallow(selectGameStatus));
+  const { whiteTime, blackTime, turn, isUnlimited } = useGameStore(useShallow(selectTimeState));
+  const { gameMode, timeControl, elo } = useGameStore(useShallow(selectGameSettings));
   
   // Individual state pieces that change frequently
   const moves = useGameStore((s) => s.moves);

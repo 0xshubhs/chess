@@ -9,6 +9,7 @@
  */
 
 import React, { useEffect, useMemo, useCallback, useRef, memo } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { Square as ChessSquare } from "chess.js";
 import Square from "./Square";
 import PromotionDialog from "./PromotionDialog";
@@ -25,6 +26,7 @@ type PromotionPiece = "q" | "r" | "b" | "n";
 function Board() {
   // ============================================================================
   // State from store (surgical subscriptions)
+  // useShallow prevents infinite loops by doing shallow equality comparison
   // ============================================================================
   
   const {
@@ -36,7 +38,7 @@ function Board() {
     kingInCheck,
     animatingPiece,
     capturingSquare,
-  } = useGameStore(selectBoardState);
+  } = useGameStore(useShallow(selectBoardState));
   
   const pendingPromotion = useGameStore((s) => s.pendingPromotion);
   const isAiThinking = useGameStore((s) => s.isAiThinking);
